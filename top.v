@@ -1,432 +1,378 @@
 //=============================================================================
 // top.v
-// 一阶倒立摆主控（GW2A 系列）
-//   - 角度：AD9200 / 3PA1030 10bit 并行 ADC（WDD35D4 角度传感器）
-//   - 位置：增量式编码器 x2（四倍频，中心值 32768）
-//   - 控制：位置环(外环) + 角度环(内环) 增量式 PID（pid_dual_loop.v）
-//   - 驱动：TB6612 x2（两路电机同方向、同占空比）
-//   - 交互：ESP32 通过 UART 9600 8N1 发送命令，FPGA 周期回传状态
+// 旋转式倒立摆（Furuta pendulum）主控：
+//   - 编码器 = 摆臂在水平面内的转角 φ（16 bit 计数）
+//   - ADC    = 摆杆相对竖直的倾角 θ（12 bit）
+//   - 内环：摆杆倾角环 5 ms（200 Hz），PD + 小积分
+//   - 外环：摆臂转角环 50 ms（20 Hz），PD，输出是摆杆倾角目标的偏移
+//   - 串口：115200 bps，100 Hz 二进制遥测（见 telemetry.v）
 //
-// ESP32 -> FPGA 命令帧（6 字节）：
-//   AA 55 CMD DL DH XOR          XOR = CMD ^ DL ^ DH
-//   CMD=01 START        启动闭环（仅当角度在安全范围内；启动时锁存当前位置）
-//   CMD=02 STOP         停止闭环，电机停转
-//   CMD=03 SET_UPRIGHT  DATA=竖直时 theta_raw 的 12bit 原始值（0~4095）
-//   CMD=04 SET_DIR      DATA=0 正常，1 电机方向取反（调线序用）
-//   CMD=05 CLEAR_FAULT  清除 fault 标志（不会自动启动）
-//   CMD=06 CAP_UPRIGHT  以当前 theta_raw 作为竖直校准值
-//   CMD=07 SET_POS_DIR  DATA=0 编码器正常，1 编码器计数取反（位置环方向）
+// 自动起摆（本次新增）：
+//   1. 角度传感器在 0 或 4095 附近（自然下垂）持续 HANG_CONFIRM_MS，
+//      自动进入 S_SWING，触发一次起摆；
+//   2. swing_up.v 用“能量泵 + 起始踢动 + v_need 限速”把摆杆送到顶部；
+//   3. 摆杆进入 CAPTURE_ANGLE / CAPTURE_VEL 窗口后，立即切到 S_BALANCE，
+//      由原有角度环 + 摆臂转角环接管（目标在切换瞬间锁存为当前转角）；
+//   4. 起摆超时或平衡中倒下会停机并撤销自动触发（AUTO_RETRY=0 默认），
+//      需再按 K1 才会重新起摆；把 AUTO_RETRY 改成 1 可让下垂后自动重试，
+//      避免无人看守时无限次反复踢摆。
 //
-// FPGA -> ESP32 遥测帧（10 字节，约 0.5s 一帧）：
-//   AA 55 TH TL E1H E1L E2H E2L 0D 0A
-//   TH/TL = {run, fault, motor_sel[1:0], theta_raw[11:0]}
-//       theta     = {TH[3:0], TL}      // 12bit 角度原始值
-//       run       = TH[7]
-//       fault     = TH[6]
-//       motor_sel = TH[5:4]           // 00 停 01 正转 10 反转 11 刹车
-//   E1 = enc_pos1（16bit，中心 32768），E2 = enc_pos2
+// K1 语义：
+//   - 运行中按 K1：立即停止并撤销自动触发；
+//   - 静止且摆杆在平衡窗口内按 K1：直接进入平衡；
+//   - 静止且摆杆下垂时按 K1：立即起摆；
+//   - 其它静止位置按 K1：重新允许自动起摆。
+//
+// 注意：代码里的 Location / loc_* 是历史命名，指的都是“摆臂转角环”，
+//       不是小车直线位置；loc_cmd 的单位是摆杆倾角 ADC counts，
+//       loc_error 的单位是编码器 counts，两者不能直接相减。
+//
+// 历史改动（保留）：
+//   1. 修复摆臂转角环实际 18 ms 而不是 50 ms 的计数器位宽错误；
+//   2. 摆臂转角环 Kd 按 50 ms 重新折算，输出权限限到 ±60；
+//   3. 平衡点统一为 CENTER_ANGLE，不再出现 2010/2063 两套值；
+//   4. 启动时把当前摆臂转角锁为外环目标，避免一启动就“回上电零点”；
+//   5. PID 增加 run/积分限幅/微分低通，停机清零，启动无微分冲击；
+//   6. 串口改为真正能发完的 100 Hz 遥测帧。
 //=============================================================================
-module top #(
-    //==================== PID 参数 ====================
-    parameter signed [15:0] KP_POS = 16'sd10,
-    parameter signed [15:0] KI_POS = 16'sd2,
-    parameter signed [15:0] KD_POS = 16'sd30,
-    parameter signed [15:0] KP_ANG = 16'sd40,
-    parameter signed [15:0] KI_ANG = 16'sd3,
-    parameter signed [15:0] KD_ANG = 16'sd25,
-
-    //==================== 控制周期 ====================
-    // 50MHz * 1ms - 1 = 1kHz。
-    // 注意：adc.v 每 3ms 才更新一次 theta_out。如果角度环出现 3ms 周期的
-    // 抖动，可把该参数改为 32'd149_999，让 PID 与 ADC 更新同步（333Hz）。
-    parameter [31:0] CNT_CYCLE = 32'd49_999,
-
-    //==================== 安全保护 ====================
-    // 相对竖直位置的最大允许偏差，单位：12bit ADC 码值。
-    // WDD35D4 约 345°/1024(10bit)，12bit 下约 11.9 码/度，360 码 ≈ 30°。
-    parameter [12:0] SAFE_ANGLE = 13'd360,
-    // 倾倒确认时间：50MHz * 1ms - 1，连续超过 SAFE_ANGLE 达 1ms 立即停机
-    parameter [19:0] FALL_CNT_MAX = 20'd49_999,
-
-    // 上电默认电机方向（1=取反），也可以用 CMD=04 在线修改
-    parameter DIR_INV_DEFAULT = 1'b0,
-    // 上电默认编码器计数方向（1=取反），也可以用 CMD=07 在线修改
-    parameter POS_INV_DEFAULT = 1'b0
-)(
-    input           clk_50m,        // 50MHz 板载时钟
-    input           rst_n,          // 复位，低有效
-
-    // ESP32 串口
-    output          uart_tx,        // FPGA -> ESP32
-    input           uart_rx,        // ESP32 -> FPGA
-
-    // ADC（AD9200 / 3PA1030）接口
-    output          adc_clk,        // ADC 采样时钟
-    output          adc_oe_n,       // 输出使能，低有效
-    input   [9:0]   adc_data_in,    // D9~D0 并行数据
-
+module top (
+    input  wire        clk_50m,
+    input  wire        rst_n,
+    // ADC
+    input  wire [9:0]  adc_data_in,
+    output wire        adc_clk,
     // 编码器
-    input           enc1_a,
-    input           enc1_b,
-    input           enc2_a,
-    input           enc2_b,
-
-    // TB6612 电机 A
-    output          AN1,
-    output          AN2,
-    output          PWMA,
-
-    // TB6612 电机 B
-    output          BN1,
-    output          BN2,
-    output          PWMB
+    input  wire        enc_a,
+    input  wire        enc_b,
+    // 按键（K1 启停/手动起摆；K2/K3 保留）
+    input  wire        key1,
+    input  wire        key2,
+    input  wire        key3,
+    // 电机
+    output wire        pwm_out,       // PWM 调速（接 ENA）
+    output wire        in1,           // IN1
+    output wire        in2,           // IN2
+    // 串口
+    output wire        fpga_tx,
+    input  wire        fpga_rx,
+    // LED
+    output wire        led
 );
 
-//=============================================================================
-// 命令定义
-//=============================================================================
-localparam [7:0] CMD_START       = 8'h01;
-localparam [7:0] CMD_STOP        = 8'h02;
-localparam [7:0] CMD_SET_UPRIGHT = 8'h03;
-localparam [7:0] CMD_SET_DIR     = 8'h04;
-localparam [7:0] CMD_CLEAR_FAULT = 8'h05;
-localparam [7:0] CMD_CAP_UPRIGHT = 8'h06;
-localparam [7:0] CMD_SET_POS_DIR = 8'h07;
+    //==================== 机械 / 传感器参数 ====================
+    // 平衡点：把摆杆扶到静止竖直，看串口 angle_raw，把该值填到这里。
+    // 自然下垂时 angle_raw 在 0 / 4095 附近，竖直时约为 2053。
+    localparam [11:0] CENTER_ANGLE = 12'd2053;
+    localparam [11:0] CENTER_RANGE = 12'd500;
+    localparam [11:0] CENTER_LOW   = CENTER_ANGLE - CENTER_RANGE;  // 1553
+    localparam [11:0] CENTER_HIGH  = CENTER_ANGLE + CENTER_RANGE;  // 2553
 
-// 接收状态机
-localparam [2:0] S_IDLE = 3'd0;
-localparam [2:0] S_HEAD = 3'd1;
-localparam [2:0] S_CMD  = 3'd2;
-localparam [2:0] S_DL   = 3'd3;
-localparam [2:0] S_DH   = 3'd4;
-localparam [2:0] S_CHK  = 3'd5;
+    // 旋转编码器 11 线，四倍频后 44 counts/圈（编码器轴）。
+    // 旋转式：编码器测的是摆臂转角；若编码器在电机轴上，摆臂一圈计数 = 44 × 减速比。
+    localparam integer ENCODER_PPR = 11;
+    localparam integer ADC_BITS    = 12;
 
-//=============================================================================
-// 传感器采集
-//=============================================================================
-wire [11:0] theta_raw;          // 3ms 平均后的角度，0~4092
-wire [15:0] enc_pos1, enc_pos2; // 编码器位置，中心 32768
+    //==================== 自动起摆参数 ====================
+    // 自然下垂判定：0 或 4095 两侧各 HANG_BAND counts 以内。
+    localparam [11:0] HANG_BAND        = 12'd240;    // 约 ±7°
+    localparam [15:0] HANG_CONFIRM_MS  = 16'd500;   // 持续 0.5 s 才触发
+    localparam        AUTO_ARM_ON_RESET = 1'b1;     // 上电即允许自动起摆
+    localparam        AUTO_RETRY        = 1'b0;     // 超时/倒杆后是否自动重试
 
-adc adc_inst (
-    .clk_50m     (clk_50m    ),
-    .rst_n       (rst_n      ),
-    .adc_clk     (adc_clk    ),
-    .adc_data_in (adc_data_in),
-    .theta_out   (theta_raw  )
-);
+    // 起摆驱动：先踢一下，再能量泵
+    localparam [7:0]  SWING_DUTY          = 8'd80;   // 能量泵占空比 %
+    localparam [7:0]  SWING_KICK_DUTY     = 8'd35;   // 起始踢动占空比 %
+    localparam [15:0] SWING_KICK_MS       = 16'd100; // 起始踢动时间 ms
+    localparam [11:0] SWING_CAPTURE_ANGLE = 12'd300; // 距平衡点 ±300 counts 捕获
+    localparam [15:0] SWING_CAPTURE_VEL   = 16'd8;  // counts / 5 ms
+    localparam [15:0] SWING_TIMEOUT_MS    = 16'd4000;// 单次起摆超时
+    localparam [7:0]  SWING_VNEED_OFFSET  = 8'd0;    // 加大可补偿摩擦
+    localparam        SWING_POLARITY      = 1'b1;    // 方向反了改成 1'b0
 
-// 新版 adc.v 不再有 adc_stby_n 端口，OE 直接常开（低有效）
-assign adc_oe_n = 1'b0;
+    //==================== PID 参数（16.16 定点） ====================
+    // 摆杆倾角环 5 ms（内环）
+    localparam signed [31:0] ANGLE_KP = 32'sd19661;   // 0.30
+    localparam signed [31:0] ANGLE_KI = 32'sd655;     // 0.01
+    localparam signed [31:0] ANGLE_KD = 32'sd26214;   // 0.40
 
-encoder encoder_1 (
-    .clk_50m (clk_50m ),
-    .rst_n   (rst_n   ),
-    .enc_a   (enc1_a  ),
-    .enc_b   (enc1_b  ),
-    .pos     (enc_pos1)
-);
+    // 摆臂转角环 50 ms（外环）：原来 4.00 是按 18 ms 跑的，折算到 50 ms 为 1.44；
+    // 这里取 1.50，等效微分作用与原来接近。
+    localparam signed [31:0] LOC_KP   = 32'sd29492;   // 0.40
+    localparam signed [31:0] LOC_KI   = 32'sd0;       // 0
+    localparam signed [31:0] LOC_KD   = 32'sd140000;   // 1.50 188304
 
-encoder encoder_2 (
-    .clk_50m (clk_50m ),
-    .rst_n   (rst_n   ),
-    .enc_a   (enc2_a  ),
-    .enc_b   (enc2_b  ),
-    .pos     (enc_pos2)
-);
+    // 摆臂转角环输出权限：单位是摆杆倾角 ADC counts（不是编码器 counts）。
+    // 旧版 ±100 过大，容易让摆臂大幅摆动。
+    localparam signed [7:0]  LOC_OUT_LIMIT = 8'sd60;
 
-//=============================================================================
-// ESP32 命令接收与解析
-//=============================================================================
-wire [7:0] rx_byte;
-wire       rx_valid;
+    // 积分限幅（单位：误差码值）与微分低通移位
+    localparam [15:0] ANGLE_INT_MAX  = 16'd500;
+    localparam [15:0] LOC_INT_MAX    = 16'd1000;
+    localparam [4:0]  ANGLE_DIFF_LPF = 5'd1;
+    localparam [4:0]  LOC_DIFF_LPF   = 5'd1;
 
-uart_rx #(
-    .UART_BPS (21'd9600       ),
-    .CLK_FREQ (26'd50_000_000 )
-) uart_rx_inst (
-    .sys_clk   (clk_50m ),
-    .sys_rst_n (rst_n   ),
-    .rx        (uart_rx ),
-    .po_data   (rx_byte ),
-    .po_flag   (rx_valid)
-);
+    //==================== 状态机 ====================
+    localparam [1:0] S_IDLE    = 2'd0;
+    localparam [1:0] S_SWING   = 2'd1;
+    localparam [1:0] S_BALANCE = 2'd2;
 
-reg [2:0]  cmd_state;
-reg [7:0]  cmd_code;
-reg [7:0]  cmd_dl;
-reg [7:0]  cmd_dh;
-reg [19:0] cmd_timeout;         // 半帧超时：20ms 没有新字节则丢弃半帧
+    reg  [1:0]  state;
+    reg         armed;          // 允许自动触发；停机/超时后清零
+    reg  [15:0] hang_ms;        // 连续自然下垂计时
 
-reg        start_req;
-reg        stop_req;
-reg        clear_req;
+    //==================== 内部信号 ====================
+    wire [11:0] Angle;
+    wire [15:0] pos;
+    wire key1_flag, key2_flag, key3_flag;
 
-reg        run;                 // 闭环运行
-reg        fault;               // 倾倒或启动条件不满足
-reg [11:0] ang_upright;         // 竖直位置对应的 ADC 原始值，默认中值 2048
-reg        dir_inv;             // 电机方向取反
-reg        pos_inv;             // 编码器计数方向取反
+    // 1 ms 时基
+    reg  [16:0] cnt_1ms;
+    wire        tick_1ms;
 
-// 位置反馈（停止状态下可通过 CMD=07 取反，围绕 32768 中心翻转）
-wire [15:0] pos_fb_used = pos_inv ? (16'd0 - enc_pos1) : enc_pos1;
+    // 分频计数
+    reg  [5:0] cnt_5ms;
+    reg  [5:0] cnt_50ms;
+    wire       update_angle, update_loc;
 
-always @(posedge clk_50m or negedge rst_n) begin
-    if(!rst_n) begin
-        cmd_state   <= S_IDLE;
-        cmd_code    <= 8'd0;
-        cmd_dl      <= 8'd0;
-        cmd_dh      <= 8'd0;
-        cmd_timeout <= 20'd0;
-        start_req   <= 1'b0;
-        stop_req    <= 1'b0;
-        clear_req   <= 1'b0;
-        ang_upright <= 12'd2048;
-        dir_inv     <= DIR_INV_DEFAULT;
-        pos_inv     <= POS_INV_DEFAULT;
-    end else begin
-        // 请求信号默认拉低，只在解析到完整命令时产生一个时钟脉冲
-        start_req <= 1'b0;
-        stop_req  <= 1'b0;
-        clear_req <= 1'b0;
+    wire swinging  = (state == S_SWING);
+    wire balancing = (state == S_BALANCE);
+    wire active    = swinging || balancing;
 
-        if(rx_valid) begin
-            cmd_timeout <= 20'd0;
-            case(cmd_state)
-                S_IDLE: begin
-                    if(rx_byte == 8'hAA)
-                        cmd_state <= S_HEAD;
-                end
+    // 摆臂转角目标：进入平衡瞬间锁存当前摆臂转角
+    reg signed [15:0] LocationTarget;
 
-                S_HEAD: begin
-                    if(rx_byte == 8'h55)
-                        cmd_state <= S_CMD;
-                    else if(rx_byte != 8'hAA)
-                        cmd_state <= S_IDLE;
-                end
+    // 摆臂转角 = 编码器原始值 - 上电中心（16 位模运算后再按有符号解释）
+    wire [15:0]        loc_bits = pos - 16'd32768;
+    wire signed [15:0] Location = $signed(loc_bits);
 
-                S_CMD: begin
-                    cmd_code  <= rx_byte;
-                    cmd_state <= S_DL;
-                end
+    // PID 输出
+    wire signed [7:0] angle_pid_out;
+    wire signed [7:0] loc_pid_out;
 
-                S_DL: begin
-                    cmd_dl    <= rx_byte;
-                    cmd_state <= S_DH;
-                end
+    // 摆臂转角环输出限幅（单位：摆杆倾角 ADC counts）
+    wire signed [7:0] loc_cmd = (loc_pid_out >  LOC_OUT_LIMIT) ?  LOC_OUT_LIMIT :
+                                (loc_pid_out < -LOC_OUT_LIMIT) ? -LOC_OUT_LIMIT :
+                                loc_pid_out;
+    wire signed [15:0] loc_cmd_ext = {{8{loc_cmd[7]}}, loc_cmd};
 
-                S_DH: begin
-                    cmd_dh    <= rx_byte;
-                    cmd_state <= S_CHK;
-                end
+    // 摆杆倾角目标 = 平衡点 - 摆臂转角环输出
+    wire signed [15:0] AngleTarget = $signed({4'd0, CENTER_ANGLE}) - loc_cmd_ext;
+    wire signed [15:0] angle_actual = $signed({4'd0, Angle});
+    wire signed [15:0] angle_error  = AngleTarget - angle_actual;
+    wire signed [15:0] loc_error    = LocationTarget - Location;   // 摆臂转角误差
 
-                S_CHK: begin
-                    cmd_state <= S_IDLE;
-                    if(rx_byte == (cmd_code ^ cmd_dl ^ cmd_dh)) begin
-                        case(cmd_code)
-                            CMD_START:       start_req <= 1'b1;
-                            CMD_STOP:        stop_req  <= 1'b1;
-                            CMD_CLEAR_FAULT: clear_req <= 1'b1;
+    // 状态标志
+    wire angle_in_window = (Angle > CENTER_LOW) && (Angle < CENTER_HIGH);
+    wire loc_sat         = (loc_pid_out >= LOC_OUT_LIMIT) || (loc_pid_out <= -LOC_OUT_LIMIT);
+    wire angle_sat       = (angle_pid_out >= 8'sd100) || (angle_pid_out <= -8'sd100);
 
-                            CMD_SET_UPRIGHT: begin
-                                // 0~4095 的 12bit 原始角度；运行中不允许改，防止目标跳变
-                                if(!run && cmd_dh[7:4] == 4'h0)
-                                    ang_upright <= {cmd_dh[3:0], cmd_dl};
-                            end
+    // 自然下垂：0 或 4095 附近
+    wire hang_now = (Angle <= HANG_BAND) || ((12'd4095 - Angle) <= HANG_BAND);
 
-                            CMD_SET_DIR: begin
-                                if(!run && (cmd_dl == 8'd0 || cmd_dl == 8'd1))
-                                    dir_inv <= cmd_dl[0];
-                            end
+    // 起摆模块输出
+    wire signed [7:0] swing_drive;
+    wire              swing_captured;
+    wire              swing_timeout;
 
-                            CMD_SET_POS_DIR: begin
-                                if(!run && (cmd_dl == 8'd0 || cmd_dl == 8'd1))
-                                    pos_inv <= cmd_dl[0];
-                            end
+    // 电机驱动：起摆时用 swing_drive，平衡时用角度环输出，其它时候刹车
+    wire signed [7:0] motor_out = balancing ? angle_pid_out :
+                                  swinging  ? swing_drive   : 8'sd0;
+    wire [7:0]        pwm_duty  = motor_out[7] ? (~motor_out + 1'b1) : motor_out;
 
-                            CMD_CAP_UPRIGHT: begin
-                                if(!run)
-                                    ang_upright <= theta_raw;
-                            end
+    // IN1/IN2：运行且输出非零时按符号驱动，否则刹车
+    assign in1 = (active && motor_out != 8'sd0) ? ~motor_out[7] : 1'b1;
+    assign in2 = (active && motor_out != 8'sd0) ?  motor_out[7] : 1'b1;
 
-                            default: ;
-                        endcase
-                    end
-                end
+    assign led = active;
 
-                default: cmd_state <= S_IDLE;
-            endcase
-        end else if(cmd_state != S_IDLE) begin
-            // 20ms 内没有收到下一个字节，认为半帧丢失，回到空闲重新同步
-            if(cmd_timeout >= 20'd999_999) begin
-                cmd_state   <= S_IDLE;
-                cmd_timeout <= 20'd0;
-            end else begin
-                cmd_timeout <= cmd_timeout + 1'b1;
-            end
-        end else begin
-            cmd_timeout <= 20'd0;
+    //==================== 子模块 ====================
+    adc u_adc (
+        .clk_50m     (clk_50m),
+        .rst_n       (rst_n),
+        .adc_clk     (adc_clk),
+        .adc_data_in (adc_data_in),
+        .theta_out   (Angle)
+    );
+
+    encoder u_encoder (
+        .clk_50m (clk_50m),
+        .rst_n   (rst_n),
+        .enc_a   (enc_a),
+        .enc_b   (enc_b),
+        .pos     (pos)
+    );
+
+    key_filter u_key1 (.sys_clk(clk_50m), .sys_rst_n(rst_n), .key_in(key1), .key_flag(key1_flag));
+    key_filter u_key2 (.sys_clk(clk_50m), .sys_rst_n(rst_n), .key_in(key2), .key_flag(key2_flag));
+    key_filter u_key3 (.sys_clk(clk_50m), .sys_rst_n(rst_n), .key_in(key3), .key_flag(key3_flag));
+
+    pwm_20k_1pct u_pwm (
+        .clk       (clk_50m),
+        .rstn      (rst_n),
+        .pid_duty  (pwm_duty),
+        .pwm       (pwm_out)
+    );
+
+    swing_up #(
+        .CENTER_ANGLE  (CENTER_ANGLE),
+        .SWING_DUTY    (SWING_DUTY),
+        .KICK_DUTY     (SWING_KICK_DUTY),
+        .KICK_MS       (SWING_KICK_MS),
+        .CAPTURE_ANGLE (SWING_CAPTURE_ANGLE),
+        .CAPTURE_VEL   (SWING_CAPTURE_VEL),
+        .TIMEOUT_MS    (SWING_TIMEOUT_MS),
+        .VEL_DEADBAND  (16'd2),
+        .VNEED_OFFSET  (SWING_VNEED_OFFSET),
+        .POLARITY      (SWING_POLARITY)
+    ) u_swing (
+        .clk      (clk_50m),
+        .rst_n    (rst_n),
+        .active   (swinging),
+        .update   (update_angle),
+        .tick_1ms (tick_1ms),
+        .angle    (Angle),
+        .drive    (swing_drive),
+        .captured (swing_captured),
+        .timeout  (swing_timeout)
+    );
+
+    // 100 Hz 遥测，115200 bps
+    telemetry #(
+        .CLK_FREQ    (50_000_000),
+        .UART_BPS    (115200),
+        .FRAME_MS    (10),
+        .ENCODER_PPR (ENCODER_PPR),
+        .ADC_BITS    (ADC_BITS)
+    ) u_telemetry (
+        .clk           (clk_50m),
+        .rst_n         (rst_n),
+        .tick_1ms      (tick_1ms),
+        .uart_tx       (fpga_tx),
+        .angle_raw     (Angle),
+        .angle_target  (AngleTarget),
+        .encoder_pos   (pos),
+        .loc_error     (loc_error),
+        .angle_pid_out (angle_pid_out),
+        .loc_pid_out   (loc_pid_out),
+        .loc_cmd       (loc_cmd),
+        .motor_out     (motor_out),
+        .duty          (pwm_duty),
+        .run           (balancing),
+        .swing         (swinging),
+        .in_window     (angle_in_window),
+        .loc_sat       (loc_sat),
+        .angle_sat     (angle_sat)
+    );
+
+    pid_core #(
+        .DIFF_LPF_SHIFT (ANGLE_DIFF_LPF)
+    ) u_angle_pid (
+        .clk            (clk_50m),
+        .rst_n          (rst_n),
+        .update         (update_angle),
+        .run            (balancing),
+        .actual         (angle_actual),
+        .target         (AngleTarget),
+        .Kp             (ANGLE_KP),
+        .Ki             (ANGLE_KI),
+        .Kd             (ANGLE_KD),
+        .int_max        (ANGLE_INT_MAX),
+        .out            (angle_pid_out)
+    );
+
+    pid_core #(
+        .DIFF_LPF_SHIFT (LOC_DIFF_LPF)
+    ) u_loc_pid (
+        .clk            (clk_50m),
+        .rst_n          (rst_n),
+        .update         (update_loc),
+        .run            (balancing),
+        .actual         (Location),
+        .target         (LocationTarget),
+        .Kp             (LOC_KP),
+        .Ki             (LOC_KI),
+        .Kd             (LOC_KD),
+        .int_max        (LOC_INT_MAX),
+        .out            (loc_pid_out)
+    );
+
+    //==================== 1 ms 时基与分频 ====================
+    always @(posedge clk_50m or negedge rst_n) begin
+        if (!rst_n) cnt_1ms <= 17'd0;
+        else if (tick_1ms) cnt_1ms <= 17'd0;
+        else cnt_1ms <= cnt_1ms + 1'b1;
+    end
+    assign tick_1ms = (cnt_1ms == 17'd49999);
+
+    always @(posedge clk_50m or negedge rst_n) begin
+        if (!rst_n) begin
+            cnt_5ms  <= 6'd0;
+            cnt_50ms <= 6'd0;
+        end else if (tick_1ms) begin
+            cnt_5ms  <= (cnt_5ms  == 5'd4)  ? 6'd0 : cnt_5ms  + 1'b1;
+            cnt_50ms <= (cnt_50ms == 6'd49) ? 6'd0 : cnt_50ms + 1'b1;
         end
     end
-end
+    assign update_angle = tick_1ms && (cnt_5ms  == 5'd4);
+    assign update_loc   = tick_1ms && (cnt_50ms == 6'd49);
 
-//=============================================================================
-// 运行状态 / 安全保护
-//=============================================================================
-reg [15:0] pos_set;             // 位置目标，START 时锁存
-reg [4:0]  pid_clr_cnt;         // PID 复位展宽
-reg [19:0] fall_cnt;            // 倾倒确认计数
-
-// 相对竖直位置的偏差（有符号）
-wire signed [12:0] ang_dev;
-wire        [12:0] ang_abs;
-wire               angle_ok;
-
-assign ang_dev  = $signed({1'b0, theta_raw}) - $signed({1'b0, ang_upright});
-assign ang_abs  = (ang_dev < 13'sd0) ? -ang_dev : ang_dev;
-assign angle_ok = (ang_abs < SAFE_ANGLE);
-
-// PID 复位：START/STOP/FAULT 后拉低约 31 个时钟，清空积分和历史
-wire pid_rst_n = rst_n & (pid_clr_cnt == 5'd0);
-wire pid_en    = run & ~fault & (pid_clr_cnt == 5'd0);
-
-always @(posedge clk_50m or negedge rst_n) begin
-    if(!rst_n) begin
-        run         <= 1'b0;
-        fault       <= 1'b0;
-        pos_set     <= 16'd0;
-        pid_clr_cnt <= 5'd0;
-        fall_cnt    <= 20'd0;
-    end else begin
-        //-------------------------------------------------------------
-        // 1. PID 复位展宽计数（先自减，后面的命令赋值优先级更高）
-        //-------------------------------------------------------------
-        if(pid_clr_cnt != 5'd0)
-            pid_clr_cnt <= pid_clr_cnt - 1'b1;
-
-        //-------------------------------------------------------------
-        // 2. 倾倒保护：连续 1ms 超出安全角度立即停机
-        //-------------------------------------------------------------
-        if(run && !angle_ok) begin
-            if(fall_cnt >= (FALL_CNT_MAX - 1'b1)) begin
-                run         <= 1'b0;
-                fault       <= 1'b1;
-                pid_clr_cnt <= 5'd31;
-                fall_cnt    <= 20'd0;
-            end else begin
-                fall_cnt <= fall_cnt + 1'b1;
-            end
-        end else begin
-            fall_cnt <= 20'd0;
-        end
-
-        //-------------------------------------------------------------
-        // 3. 启停命令
-        //-------------------------------------------------------------
-        if(start_req) begin
-            if(angle_ok) begin
-                // 以当前小车位置作为位置环目标，避免启动瞬间位置环猛拉
-                pos_set     <= pos_fb_used;
-                run         <= 1'b1;
-                fault       <= 1'b0;
-                pid_clr_cnt <= 5'd31;
-                fall_cnt    <= 20'd0;
-            end else begin
-                // 角度不在安全范围内，拒绝启动并置 fault，等待 ESP32 处理
-                run         <= 1'b0;
-                fault       <= 1'b1;
-                pid_clr_cnt <= 5'd31;
-            end
-        end else if(stop_req) begin
-            run         <= 1'b0;
-            pid_clr_cnt <= 5'd31;
-            fall_cnt    <= 20'd0;
-        end else if(clear_req) begin
-            fault <= 1'b0;
+    //==================== 自然下垂计时 ====================
+    always @(posedge clk_50m or negedge rst_n) begin
+        if (!rst_n)
+            hang_ms <= 16'd0;
+        else if (tick_1ms) begin
+            if ((state != S_IDLE) || !armed || !hang_now)
+                hang_ms <= 16'd0;
+            else if (hang_ms != HANG_CONFIRM_MS)
+                hang_ms <= hang_ms + 1'b1;
         end
     end
-end
 
-//=============================================================================
-// 双闭环 PID
-//=============================================================================
-// 把“竖直=ang_upright”平移到“竖直=2048”，pid_dual_loop 内部固定以 2048
-// 为角度目标，这样无需修改 PID 模块即可完成传感器零位校准。
-wire [11:0] ang_trim = ang_upright - 12'd2048;
-wire [11:0] theta_fb = theta_raw - ang_trim;
-
-wire [11:0] theta_set_dbg;      // 角度环目标（调试用，不参与对外输出）
-wire [1:0]  motor_sel_raw;
-wire [7:0]  duty_raw;
-
-pid_dual_loop #(
-    .KP_POS   (KP_POS   ),
-    .KI_POS   (KI_POS   ),
-    .KD_POS   (KD_POS   ),
-    .KP_ANG   (KP_ANG   ),
-    .KI_ANG   (KI_ANG   ),
-    .KD_ANG   (KD_ANG   ),
-    .CNT_CYCLE(CNT_CYCLE)
-) pid_dual_loop_inst (
-    .clk_50m   (clk_50m       ),
-    .rst_n     (pid_rst_n     ),
-    .pid_en    (pid_en        ),
-    .pos_fb    (pos_fb_used   ),
-    .pos_set   (pos_set       ),
-    .theta_fb  (theta_fb      ),
-    .theta_set (theta_set_dbg ),
-    .motor_sel (motor_sel_raw ),
-    .duty_out  (duty_raw      )
-);
-
-//=============================================================================
-// 电机输出（停止时强制 00 + 占空比 0，避免 PID 残值驱动电机）
-//=============================================================================
-wire drive_en = run & ~fault;
-
-wire [1:0] motor_sel_inv = (motor_sel_raw == 2'b01) ? 2'b10 :
-                           (motor_sel_raw == 2'b10) ? 2'b01 :
-                                                      motor_sel_raw;
-
-wire [1:0] motor_sel = drive_en ? (dir_inv ? motor_sel_inv : motor_sel_raw)
-                                : 2'b00;
-wire [7:0] duty_out  = drive_en ? duty_raw : 8'd0;
-
-motor_ctrl motor_ctrl_A (
-    .clk_50m     (clk_50m  ),
-    .rst_n       (rst_n    ),
-    .motor_a_sel (motor_sel),
-    .duty_out    (duty_out ),
-    .ain1        (AN1      ),
-    .ain2        (AN2      ),
-    .pwm         (PWMA     )
-);
-
-motor_ctrl motor_ctrl_B (
-    .clk_50m     (clk_50m  ),
-    .rst_n       (rst_n    ),
-    .motor_a_sel (motor_sel),
-    .duty_out    (duty_out ),
-    .ain1        (BN1      ),
-    .ain2        (BN2      ),
-    .pwm         (PWMB     )
-);
-
-//=============================================================================
-// 遥测：角度 + 状态 + 两路编码器
-//=============================================================================
-wire [15:0] telem_data = {run, fault, motor_sel, theta_raw};
-wire [15:0] uart_data_out;
-
-uart #(
-    .CNT_1S (32'd24_999_999)     // 0.5s 启动一帧（9600 波特率下一帧约 210ms）
-) uart_inst (
-    .clk_50M    (clk_50m               ),
-    .rst_n      (rst_n                 ),
-    .fpga_rx    (uart_rx               ),
-    .fpga_tx    (uart_tx               ),
-    .data_in    (telem_data            ),
-    .encoder_in ({enc_pos1, enc_pos2}  ),
-    .data_out   (uart_data_out         )
-);
+    //==================== 启停 / 起摆 / 平衡状态机 ====================
+    always @(posedge clk_50m or negedge rst_n) begin
+        if (!rst_n) begin
+            state          <= S_IDLE;
+            armed          <= AUTO_ARM_ON_RESET;
+            LocationTarget <= 16'sd0;
+        end else if (key1_flag) begin
+            if (state != S_IDLE) begin
+                // 运行中：立即停止并撤销自动触发
+                state <= S_IDLE;
+                armed <= 1'b0;
+            end else if (angle_in_window) begin
+                // 摆杆已立住：直接进入平衡，锁当前摆臂转角
+                state          <= S_BALANCE;
+                armed          <= 1'b1;
+                LocationTarget <= Location;
+            end else if (hang_now) begin
+                // 自然下垂：立即起摆，不必再等确认时间
+                state <= S_SWING;
+                armed <= 1'b1;
+            end else begin
+                // 其它位置：重新允许自动起摆
+                armed <= 1'b1;
+            end
+        end else if (armed && (state == S_IDLE) &&
+                     (hang_ms >= HANG_CONFIRM_MS)) begin
+            // 自然下垂持续足够久：自动触发一次起摆
+            state <= S_SWING;
+        end else if (state == S_SWING) begin
+            if (swing_captured) begin
+                // 起摆完成，立即交给原有平衡逻辑
+                state          <= S_BALANCE;
+                LocationTarget <= Location;
+            end else if (swing_timeout) begin
+                // 本次尝试失败：停机；AUTO_RETRY=1 时保留下一次自动触发
+                state <= S_IDLE;
+                armed <= AUTO_RETRY;
+            end
+        end else if (state == S_BALANCE) begin
+            // 倒杆保护：只在平衡时生效，起摆过程中不检查
+            if (!angle_in_window) begin
+                state <= S_IDLE;
+                armed <= AUTO_RETRY;
+            end
+        end
+    end
 
 endmodule

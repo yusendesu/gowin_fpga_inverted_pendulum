@@ -12,7 +12,7 @@ module  uart_tx #(
      input					pi_flag     ,	//并行数据有效标志信号
  
      output		reg			tx			,	//串转并后的1bit数据
-     output		            pi_done			//发送完成一个字节标志
+     output		reg	            pi_done			//发送完成一个字节标志（停止位结束）
 	 
 );
 
@@ -93,5 +93,32 @@ always@(posedge sys_clk or negedge sys_rst_n)
             work_en_r2 <= work_en_r1;
         end
 
-assign pi_done = ~work_en_r1 & work_en_r2;
+// pi_done: work_en 下降沿只代表“停止位开始”，必须再等一个完整位周期，
+// 否则背靠背连发时停止位会被下一字节的起始位截短，接收端会把停止位
+// 当成 bit7（0x55 被读成 0x95）。
+reg         stop_wait;
+reg  [12:0] stop_cnt;
+always@(posedge sys_clk or negedge sys_rst_n)
+        if(sys_rst_n == 1'b0)begin
+            stop_wait <= 1'b0;
+            stop_cnt  <= 13'd0;
+            pi_done   <= 1'b0;
+        end
+        else begin
+            pi_done <= 1'b0;
+            if((work_en_r1 == 1'b0) && (work_en_r2 == 1'b1))begin
+                stop_wait <= 1'b1;
+                stop_cnt  <= 13'd0;
+            end
+            else if(stop_wait == 1'b1)begin
+                if(stop_cnt == BAUD_CNT_MAX - 1)begin
+                    stop_wait <= 1'b0;
+                    pi_done   <= 1'b1;
+                end
+                else begin
+                    stop_cnt <= stop_cnt + 1'b1;
+                end
+            end
+        end
+
 endmodule
