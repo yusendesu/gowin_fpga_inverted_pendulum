@@ -1,0 +1,42 @@
+==== Phase 1: pole down 100ms, RunState=0, PID keeps integrating ====
+t=    5.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   10.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   15.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   20.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   25.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   30.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   35.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   40.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   45.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   50.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   55.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   60.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   65.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   70.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   75.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   80.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   85.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   90.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=   95.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=  100.0ms  Angle=   0  err= 2078  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+==== Phase 2: pole near balance, press K1 in 5ms ====
+t=  105.0ms  Angle=2096  err=  -18  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=  110.0ms  Angle=2096  err=  -18  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=  115.0ms  Angle=2096  err=  -18  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=  120.0ms  Angle=2096  err=  -18  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=  125.0ms  Angle=2096  err=  -18  err_int=          0  out=   0  run=0  motor=   0  duty=  0  in1/in2=11
+t=  130.0ms  Angle=2096  err=  -18  err_int=          0  out=   0  run=1  motor=   0  duty=  0  in1/in2=11
+t=  135.0ms  Angle=2096  err=  -18  err_int=   -1179648  out=  -6  run=1  motor=  -6  duty=  6  in1/in2=01
+t=  140.0ms  Angle=2096  err=  -18  err_int=   -2359296  out=  -6  run=1  motor=  -6  duty=  6  in1/in2=01
+t=  145.0ms  Angle=2096  err=  -18  err_int=   -3538944  out=  -6  run=1  motor=  -6  duty=  6  in1/in2=01
+t=  150.0ms  Angle=2096  err=  -18  err_int=   -4718592  out=  -7  run=1  motor=  -7  duty=  7  in1/in2=01
+t=  155.0ms  Angle=2096  err=  -18  err_int=   -5898240  out=  -7  run=1  motor=  -7  duty=  7  in1/in2=01
+t=  160.0ms  Angle=2096  err=  -18  err_int=   -7077888  out=  -7  run=1  motor=  -7  duty=  7  in1/in2=01
+t=  165.0ms  Angle=2096  err=  -18  err_int=   -8257536  out=  -7  run=1  motor=  -7  duty=  7  in1/in2=01
+t=  170.0ms  Angle=2096  err=  -18  err_int=   -9437184  out=  -7  run=1  motor=  -7  duty=  7  in1/in2=01
+t=  175.0ms  Angle=2096  err=  -18  err_int=  -10616832  out=  -8  run=1  motor=  -8  duty=  8  in1/in2=01
+t=  180.0ms  Angle=2096  err=  -18  err_int=  -11796480  out=  -8  run=1  motor=  -8  duty=  8  in1/in2=01
+t=  185.0ms  Angle=2096  err=  -18  err_int=  -12976128  out=  -8  run=1  motor=  -8  duty=  8  in1/in2=01
+t=  190.0ms  Angle=2096  err=  -18  err_int=  -14155776  out=  -8  run=1  motor=  -8  duty=  8  in1/in2=01
+==== END t=190.0ms: motor=-8 duty=8 run=1 ====
+sim/tb_top.v:67: $finish called at 190000200000 (1ps)

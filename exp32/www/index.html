@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>摆杆控制</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:#070b12;color:#eef5ff;padding:18px 16px 24px;user-select:none;
+     font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+h1{font-size:14px;letter-spacing:.2em;color:#677c94;font-weight:600;margin:0 0 16px;text-align:center}
+.val{font-size:62px;font-weight:700;text-align:center;line-height:1;color:#00d8be;
+     font-variant-numeric:tabular-nums;margin-bottom:4px}
+.unit{text-align:center;color:#41525f;font-size:11px;letter-spacing:.22em;margin-bottom:20px}
+.preset{display:flex;gap:10px;margin-bottom:12px}
+.preset button{flex:1;height:42px;border-radius:12px;background:#0d1520;color:#a9bed8;
+     border:1px solid #20303f;font-size:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.grid button{height:62px;border-radius:14px;background:#0d1520;color:#eef5ff;
+     border:1px solid #20303f;font-size:19px;font-weight:600}
+.grid button:active{background:#07272b;border-color:#00d8be}
+.sign{width:100%;height:50px;border-radius:14px;background:#0d1520;color:#eef5ff;
+      border:1px solid #20303f;font-size:16px;margin-bottom:14px}
+.go{width:100%;height:60px;border-radius:16px;border:0;background:#00d8be;color:#04191a;
+    font-size:18px;font-weight:700;letter-spacing:.12em}
+.go:disabled{opacity:.4}
+.hint{margin-top:14px;text-align:center;color:#41525f;font-size:11px;line-height:1.8}
+.toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);padding:9px 20px;
+       border-radius:18px;background:#0d1520;border:1px solid #20303f;color:#00d8be;
+       font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+.toast.on{opacity:1}
+</style>
+</head>
+<body>
+
+<h1>ROTATION</h1>
+<div class="val" id="v">+0</div>
+<div class="unit">DEGREE</div>
+
+<div class="preset">
+  <button onclick="set(0)">0&deg;</button>
+  <button onclick="set(90)">90&deg;</button>
+  <button onclick="set(180)">180&deg;</button>
+</div>
+
+<div class="grid">
+  <button onclick="bump(-10)">&minus;10&deg;</button>
+  <button onclick="bump(10)">+10&deg;</button>
+  <button onclick="bump(-1)">&minus;1&deg;</button>
+  <button onclick="bump(1)">+1&deg;</button>
+</div>
+
+<button class="sign" onclick="flip()">切换正负号</button>
+<button class="go" id="go" onclick="send()">执 行</button>
+
+<div class="hint">数值范围 0&ndash;180&deg;<br>按“执行”下发到板子</div>
+<div class="toast" id="t"></div>
+
+<script>
+var mag = 0, pos = true, busy = false;
+var v = document.getElementById('v');
+var go = document.getElementById('go');
+var t = document.getElementById('t');
+var timer = 0;
+
+function render(){
+  v.textContent = (pos ? '+' : '\u2212') + mag;
+  v.style.color = pos ? '#00d8be' : '#f0865a';
+}
+function bump(d){
+  mag += d;
+  if (mag < 0) mag = 0;
+  if (mag > 180) mag = 180;
+  render();
+}
+function set(x){ mag = x; render(); }
+function flip(){ pos = !pos; render(); }
+
+function toast(msg, ok){
+  t.textContent = msg;
+  t.style.color = ok ? '#00d8be' : '#f0865a';
+  t.className = 'toast on';
+  clearTimeout(timer);
+  timer = setTimeout(function(){ t.className = 'toast'; }, 1500);
+}
+
+function send(){
+  if (busy) return;
+  busy = true;
+  go.disabled = true;
+  var x = pos ? mag : -mag;
+  fetch('/s?x=' + x, {cache: 'no-store'})
+    .then(function(r){ return r.json(); })
+    .then(function(j){ toast(j.ok ? '已下发 ' + x + '\u00B0' : '下发失败', !!j.ok); })
+    .catch(function(){ toast('连接失败', false); })
+    .then(function(){ busy = false; go.disabled = false; });
+}
+
+render();
+</script>
+</body>
+</html>

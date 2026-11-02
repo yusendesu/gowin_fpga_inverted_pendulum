@@ -1,0 +1,8 @@
+run 50 updates (err=2088): err_int=32768000 (500 counts) out=5
+after stop              : err_int=0 out=0
+restart (err=-4)        : err_int=-1310720 out=0
+PASS clear_int on hold_int rise: err_int=0
+PASS hold_int: err_int=0
+PASS release hold: err_int=32768000
+PASS D on measurement: target step D kick = 0
+sim/tb_pid.v:94: $finish called at 3420000 (1ps)

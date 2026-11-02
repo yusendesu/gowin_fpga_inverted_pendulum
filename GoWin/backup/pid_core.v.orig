@@ -1,0 +1,81 @@
+// PID计算核心，采用16.16定点数格式，支持符号输出及限幅，带输出死区和微分低通滤波
+module pid_core (
+    input wire clk,
+    input wire rst_n,
+    input wire update,              // 单时钟周期更新脉冲
+    input wire signed [15:0] actual,
+    input wire signed [15:0] target,
+    input wire signed [31:0] Kp,    // 16.16格式参数
+    input wire signed [31:0] Ki,
+    input wire signed [31:0] Kd,
+    input wire [15:0] deadband,     // 死区阈值（无符号，与actual/target同单位），当|error| <= deadband 时输出置0
+    input wire [4:0] diff_lpf_shift,// 微分低通滤波系数：0 = 无滤波；1~31 = 指数平滑强度（越大滤波越强）
+    output reg signed [7:0] out     // -100 ~ 100
+);
+
+    // 转换为16.16定点：左移16位
+    wire signed [31:0] actual_fixed = {actual, 16'd0};
+    wire signed [31:0] target_fixed = {target, 16'd0};
+
+    // 本次误差（16.16）
+    wire signed [31:0] error0_fixed = target_fixed - actual_fixed;
+
+    // 死区判断（与前版相同）
+    wire signed [15:0] error_raw = target - actual;
+    wire signed [16:0] error_ext = {error_raw[15], error_raw};
+    wire signed [16:0] deadband_ext = {1'b0, deadband};
+    wire in_deadband = (deadband != 16'd0) ? ((error_ext <= deadband_ext) && (error_ext >= -deadband_ext)) : 1'b0;
+
+    // 上拍误差、积分寄存器、微分滤波寄存器
+    reg signed [31:0] error1_fixed;
+    reg signed [31:0] error_int;
+    reg signed [31:0] diff_filtered;   // 一阶低通滤波后的微分值（16.16）
+
+    // 积分项：若Ki非0则累加，否则清零
+    wire signed [31:0] error_int_next = (Ki != 32'sd0) ? (error_int + error0_fixed) : 32'sd0;
+
+    // 原始微分（未滤波）
+    wire signed [31:0] diff_d = error0_fixed - error1_fixed;
+
+    // 一阶微分低通滤波器（指数平滑）
+    // diff_filtered_new = diff_filtered + ((diff_d - diff_filtered) >>> diff_lpf_shift)
+    wire signed [31:0] diff_err = diff_d - diff_filtered;
+    wire signed [31:0] diff_correction = (diff_err >>> diff_lpf_shift); // 算术右移
+    wire signed [31:0] diff_filtered_new = (diff_lpf_shift == 5'd0) ? diff_d : (diff_filtered + diff_correction);
+
+    // 乘法及求和（32x32 -> 64，结果为32.32格式）
+    wire signed [63:0] mult_p = Kp * error0_fixed;
+    wire signed [63:0] mult_i = Ki * error_int_next;
+    wire signed [63:0] mult_d = Kd * diff_filtered_new;   // 使用滤波后的微分
+    wire signed [63:0] sum64  = mult_p + mult_i + mult_d;
+
+    // 取整数部分（高32位）
+    wire signed [31:0] integer_part = sum64[63:32];
+
+    // 限幅至±100
+    wire signed [7:0] out_next = (integer_part > 32'sd100) ? 8'sd100 :
+                                 (integer_part < -32'sd100) ? -8'sd100 :
+                                 integer_part[7:0];
+
+    // 时序更新
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            error1_fixed <= 32'd0;
+            error_int   <= 32'd0;
+            diff_filtered <= 32'd0;
+            out         <= 8'd0;
+        end else if (update) begin
+            if (in_deadband) begin
+                // 死区内输出强制为0，所有内部状态保持（防止积分饱和与滤波器漂移）
+                out <= 8'd0;
+                // error1_fixed, error_int, diff_filtered 保持不变
+            end else begin
+                error1_fixed <= error0_fixed;
+                error_int   <= error_int_next;
+                diff_filtered <= diff_filtered_new;
+                out         <= out_next;
+            end
+        end
+    end
+
+endmodule

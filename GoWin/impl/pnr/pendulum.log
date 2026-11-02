@@ -1,0 +1,31 @@
+Reading netlist file: "E:\DeepSeek\gowin_inverted_pendulum\impl\gwsynthesis\pendulum.vg"
+Parsing netlist file "E:\DeepSeek\gowin_inverted_pendulum\impl\gwsynthesis\pendulum.vg" completed
+Processing netlist completed
+Reading constraint file: "E:\DeepSeek\gowin_inverted_pendulum\src\pendulum.cst"
+Physical Constraint parsed completed
+Running placement......
+[10%] Placement Phase 0 completed
+[20%] Placement Phase 1 completed
+[30%] Placement Phase 2 completed
+WARN  (TA1132) :  'clk_50m' was determined to be a clock but was not created.
+WARN  (TA1132) :  'cnt_1ms[1]' was determined to be a clock but was not created.
+[50%] Placement Phase 3 completed
+Running routing......
+[60%] Routing Phase 0 completed
+[70%] Routing Phase 1 completed
+[80%] Routing Phase 2 completed
+[90%] Routing Phase 3 completed
+Running timing analysis......
+[95%] Timing analysis completed
+Placement and routing completed
+Bitstream generation in progress......
+Bitstream generation completed
+Running power analysis......
+[100%] Power analysis completed
+Generate file "E:\DeepSeek\gowin_inverted_pendulum\impl\pnr\pendulum.power.html" completed
+Generate file "E:\DeepSeek\gowin_inverted_pendulum\impl\pnr\pendulum.pin.html" completed
+Generate file "E:\DeepSeek\gowin_inverted_pendulum\impl\pnr\pendulum.rpt.html" completed
+Generate file "E:\DeepSeek\gowin_inverted_pendulum\impl\pnr\pendulum.rpt.txt" completed
+Generate file "E:\DeepSeek\gowin_inverted_pendulum\impl\pnr\pendulum.tr.html" completed
+Fri Oct 30 15:08:12 2026
+

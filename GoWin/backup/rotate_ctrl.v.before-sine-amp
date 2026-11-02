@@ -1,0 +1,262 @@
+//=============================================================================
+// rotate_ctrl.v
+// 平衡状态下的摆臂轨迹生成：
+//   1) S 曲线点对点移动（收到 ±角度命令）；
+//   2) 正弦摆动（收到特殊帧 0x7FFF 开始 / 0x8000 停止）。
+// 两者都输出：
+//   - target：位置环目标；
+//   - v_ref ：Q16 counts/ms，速度前馈；
+//   - rotating：轨迹未收敛/正在摆动，用于清空并保持 PID 积分。
+//
+// 通信帧格式不变：AA 55 | ANGLE_H ANGLE_L | 0D
+//   普通角度：-180..180
+//   0x7FFF：开始正弦摆动
+//   0x8000：停止正弦摆动
+//=============================================================================
+module rotate_ctrl #(
+    parameter integer COUNTS_PER_REV     = 1320,
+    parameter         DIR_SIGN           = 1'b1,
+
+    // S 曲线参数（Q16）
+    parameter integer TRAJ_KP            = 7,      // 0.0001 /ms^2
+    parameter integer TRAJ_KD            = 1311,   // 0.02 /ms
+    parameter integer TRAJ_V_MAX         = 6554,   // 0.10 count/ms ≈ 27°/s
+    parameter integer TRAJ_A_MAX         = 66,     // 0.001 count/ms^2
+    parameter integer TRAJ_A_LPF_SHIFT   = 4,      // 16 ms
+
+    // 正弦摆动参数
+    parameter integer SINE_AMP_DEG       = 10,
+    parameter integer SINE_FREQ_MILLIHZ  = 500,    // 0.5 Hz
+    parameter integer SINE_GAIN_STEP     = 131     // 0.5 s 渐入/渐出
+) (
+    input  wire               clk,
+    input  wire               rst_n,
+    input  wire               tick_1ms,
+
+    input  wire               balancing,
+    input  wire               load,
+    input  wire signed [15:0] load_value,
+    input  wire signed [15:0] location,
+
+    input  wire               lock,
+    input  wire               sine_start,
+    input  wire               sine_stop,
+    input  wire               cmd_valid,
+    input  wire signed [15:0] cmd_angle,
+
+    output wire signed [15:0] target,
+    output wire signed [31:0] v_ref,
+    output wire               rotating
+);
+
+    //-------------------------------------------------------------------------
+    // 角度 -> counts
+    //-------------------------------------------------------------------------
+    localparam signed [31:0] COUNTS_PER_DEG_Q16 =
+        (COUNTS_PER_REV * 65536 + 359) / 360;
+
+    wire signed [63:0] delta_full  = $signed(cmd_angle) * COUNTS_PER_DEG_Q16;
+    wire signed [63:0] delta_abs   = delta_full[63] ? -delta_full : delta_full;
+    wire signed [63:0] delta_mag   = (delta_abs + 64'sd32768) >>> 16;
+    wire signed [63:0] delta_trunc = delta_full[63] ? -delta_mag : delta_mag;
+    wire signed [15:0] delta = DIR_SIGN ? delta_trunc[15:0] : -delta_trunc[15:0];
+
+    //-------------------------------------------------------------------------
+    // S 曲线状态
+    //-------------------------------------------------------------------------
+    reg  signed [31:0] pos_q;
+    reg  signed [31:0] target_q;
+    reg  signed [31:0] v_q;
+    reg  signed [31:0] a_q;
+    reg  signed [15:0] target_final;
+
+    wire signed [31:0] location_q = {{16{location[15]}}, location, 16'd0};
+    wire signed [15:0] cmd_target = location + delta;
+    wire signed [31:0] cmd_target_q = {{16{cmd_target[15]}}, cmd_target, 16'd0};
+
+    wire signed [31:0] err_q = target_q - pos_q;
+    wire signed [63:0] a_p = $signed(TRAJ_KP) * err_q;
+    wire signed [63:0] a_d = $signed(TRAJ_KD) * v_q;
+    wire signed [63:0] a_des_full = a_p - a_d;
+    wire signed [31:0] a_des = a_des_full >>> 16;
+
+    wire signed [31:0] a_max = TRAJ_A_MAX;
+    wire signed [31:0] v_max = TRAJ_V_MAX;
+
+    wire signed [31:0] a_des_clamped = (a_des >  a_max) ?  a_max :
+                                       (a_des < -a_max) ? -a_max : a_des;
+
+    wire signed [31:0] a_lpf = a_q + ((a_des_clamped - a_q) >>> TRAJ_A_LPF_SHIFT);
+    wire signed [31:0] a_clamped = (a_lpf >  a_max) ?  a_max :
+                                   (a_lpf < -a_max) ? -a_max : a_lpf;
+
+    wire signed [31:0] v_next = v_q + a_clamped;
+    wire signed [31:0] v_clamped = (v_next >  v_max) ?  v_max :
+                                   (v_next < -v_max) ? -v_max : v_next;
+    wire signed [31:0] pos_next = pos_q + v_clamped;
+
+    wire signed [31:0] err_abs = err_q[31] ? -err_q : err_q;
+    wire signed [31:0] v_abs   = v_q[31]   ? -v_q   : v_q;
+    wire signed [31:0] a_abs   = a_q[31]   ? -a_q   : a_q;
+
+    //-------------------------------------------------------------------------
+    // 正弦轨迹 + 渐入/渐出
+    //-------------------------------------------------------------------------
+    localparam signed [31:0] SINE_AMP_Q16 =
+        (COUNTS_PER_REV * SINE_AMP_DEG * 65536 + 359) / 360;
+    localparam [63:0] PHASE_INC_64 =
+        (64'd1 << 32) * SINE_FREQ_MILLIHZ / 1000000;
+    localparam [31:0] PHASE_INC = PHASE_INC_64[31:0];
+    localparam signed [31:0] OMEGA_Q16 =
+        (411775 * SINE_FREQ_MILLIHZ) / 1000000; // 2*pi*65536 ≈ 411775
+    localparam signed [31:0] SINE_V_AMP_Q16 =
+        (SINE_AMP_Q16 * OMEGA_Q16) >>> 16;
+
+    reg              sine_active;
+    reg              sine_run;
+    reg  [31:0]      phase;
+    reg  [15:0]      gain;
+    reg  signed [31:0] center_q;
+
+    wire [7:0] sin_idx = phase[31:24];
+    wire [7:0] cos_idx = phase[31:24] + 8'd64;
+    wire signed [15:0] sin_val, cos_val;
+
+    sine_lut u_sin (.idx(sin_idx), .val(sin_val));
+    sine_lut u_cos (.idx(cos_idx), .val(cos_val));
+
+    wire signed [63:0] sine_pos_raw =
+        ($signed(SINE_AMP_Q16) * $signed(sin_val)) >>> 15;
+    wire signed [63:0] sine_pos_scaled =
+        (sine_pos_raw * $signed({16'd0, gain})) >>> 16;
+    wire signed [31:0] sine_pos_q = center_q + sine_pos_scaled[31:0];
+
+    wire signed [63:0] sine_v_raw =
+        ($signed(SINE_V_AMP_Q16) * $signed(cos_val)) >>> 15;
+    wire signed [63:0] sine_v_scaled =
+        (sine_v_raw * $signed({16'd0, gain})) >>> 16;
+    wire signed [31:0] sine_v_q = sine_v_scaled[31:0];
+
+    //-------------------------------------------------------------------------
+    // 输出选择
+    //-------------------------------------------------------------------------
+    wire signed [31:0] active_pos_q = sine_active ? sine_pos_q : pos_q;
+    wire signed [31:0] active_v_q   = sine_active ? sine_v_q   : v_q;
+
+    wire signed [31:0] out_abs = active_pos_q[31] ? -active_pos_q : active_pos_q;
+    wire signed [31:0] out_round = (out_abs + 32'sd32768) >>> 16;
+    assign target = active_pos_q[31] ? -out_round[15:0] : out_round[15:0];
+    assign v_ref  = active_v_q;
+
+    wire s_curve_moving = (err_abs > 32'sd65536) ||
+                          (v_abs   > 32'sd328)   ||
+                          (a_abs   > 32'sd66);
+    assign rotating = balancing && (sine_active || s_curve_moving);
+
+    //-------------------------------------------------------------------------
+    // 时序
+    //-------------------------------------------------------------------------
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            target_final <= 16'sd0;
+            target_q     <= 32'sd0;
+            pos_q        <= 32'sd0;
+            v_q          <= 32'sd0;
+            a_q          <= 32'sd0;
+            sine_active  <= 1'b0;
+            sine_run     <= 1'b0;
+            phase        <= 32'd0;
+            gain         <= 16'd0;
+            center_q     <= 32'sd0;
+        end else if (load) begin
+            target_final <= load_value;
+            target_q     <= {{16{load_value[15]}}, load_value, 16'd0};
+            pos_q        <= {{16{load_value[15]}}, load_value, 16'd0};
+            v_q          <= 32'sd0;
+            a_q          <= 32'sd0;
+            sine_active  <= 1'b0;
+            sine_run     <= 1'b0;
+            gain         <= 16'd0;
+            center_q     <= {{16{load_value[15]}}, load_value, 16'd0};
+        end else if (!balancing) begin
+            target_final <= 16'sd0;
+            target_q     <= 32'sd0;
+            pos_q        <= 32'sd0;
+            v_q          <= 32'sd0;
+            a_q          <= 32'sd0;
+            sine_active  <= 1'b0;
+            sine_run     <= 1'b0;
+            phase        <= 32'd0;
+            gain         <= 16'd0;
+            center_q     <= 32'sd0;
+        end else if (lock) begin
+            target_final <= location;
+            target_q     <= location_q;
+            pos_q        <= location_q;
+            v_q          <= 32'sd0;
+            a_q          <= 32'sd0;
+            sine_active  <= 1'b0;
+            sine_run     <= 1'b0;
+            gain         <= 16'd0;
+            center_q     <= location_q;
+        end else if (sine_start) begin
+            // 从当前位置环目标、相位 0 开始，增益渐入
+            sine_active  <= 1'b1;
+            sine_run     <= 1'b1;
+            phase        <= 32'd0;
+            gain         <= 16'd0;
+            center_q     <= pos_q;
+            target_final <= pos_q[31:16];
+            target_q     <= pos_q;
+            v_q          <= 32'sd0;
+            a_q          <= 32'sd0;
+        end else if (sine_stop) begin
+            sine_run <= 1'b0;   // 增益渐出，到 0 后回中心
+        end else if (cmd_valid) begin
+            // 普通角度命令：退出正弦，重新规划 S 曲线
+            sine_active  <= 1'b0;
+            sine_run     <= 1'b0;
+            gain         <= 16'd0;
+            target_final <= cmd_target;
+            target_q     <= cmd_target_q;
+            pos_q        <= location_q;
+            v_q          <= 32'sd0;
+            a_q          <= 32'sd0;
+        end else if (tick_1ms) begin
+            if (sine_active) begin
+                phase <= phase + PHASE_INC;
+                if (sine_run) begin
+                    if (gain >= (16'd65535 - SINE_GAIN_STEP))
+                        gain <= 16'd65535;
+                    else
+                        gain <= gain + SINE_GAIN_STEP;
+                end else begin
+                    if (gain > SINE_GAIN_STEP)
+                        gain <= gain - SINE_GAIN_STEP;
+                    else begin
+                        gain        <= 16'd0;
+                        sine_active <= 1'b0;
+                        pos_q       <= center_q;
+                        target_q    <= center_q;
+                        v_q         <= 32'sd0;
+                        a_q         <= 32'sd0;
+                    end
+                end
+            end else begin
+                // S 曲线末端 2 counts 内贴终点
+                if ((err_abs <= 32'sd131072) &&
+                    (v_abs   <= 32'sd328) &&
+                    (a_abs   <= 32'sd66)) begin
+                    pos_q <= target_q;
+                    v_q   <= 32'sd0;
+                    a_q   <= 32'sd0;
+                end else begin
+                    a_q   <= a_clamped;
+                    v_q   <= v_clamped;
+                    pos_q <= pos_next;
+                end
+            end
+        end
+    end
+
+endmodule

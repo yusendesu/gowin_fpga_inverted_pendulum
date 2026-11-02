@@ -1,0 +1,174 @@
+module top (
+    input wire clk_50m,
+    input wire rst_n,
+    // ADC
+    input wire [9:0] adc_data_in,
+    output wire adc_clk,
+    // 编码器
+    input wire enc_a, enc_b,
+    // 按键（仅 K1 启停，K2/K3 保留连接但不用于位置设定）
+    input wire key1, key2, key3,
+    // 电机
+    output wire pwm_out,       // PWM 调速（接 ENA）
+    output wire in1,           // IN1 控制引脚
+    output wire in2,           // IN2 控制引脚
+    // 串口
+    output wire fpga_tx,
+    input wire fpga_rx,
+    // LED
+    output wire led
+);
+
+    //================ 系统参数 ================
+    localparam CENTER_ANGLE = 12'd2090;
+    localparam CENTER_RANGE = 12'd500;
+    localparam CENTER_LOW   = CENTER_ANGLE - CENTER_RANGE;  // 1510
+    localparam CENTER_HIGH  = CENTER_ANGLE + CENTER_RANGE;  // 2510
+
+    // 角度环 PID 参数 (16.16 定点)
+    localparam ANGLE_KP = 32'd16384;   // 0.3
+    localparam ANGLE_KI = 32'd590;     // 0.01
+    localparam ANGLE_KD = 32'd26870;   // 0.4
+    localparam ANGLE_DEAD_BAND = 15'd4;// 容许的角度误差是5个单位
+
+    // 位置环 PID 参数
+    localparam LOC_KP = 32'd34079;     // 0.4
+    localparam LOC_KI = 32'd655;
+    localparam LOC_KD = 32'd298844;    // 4.0
+    localparam LOC_DEAD_BAND = 15'd10; // 容许的角度误差是5个单位
+
+    //================ 内部信号 ================
+    wire [11:0] Angle;
+    wire [15:0] pos;
+    wire key1_flag, key2_flag, key3_flag;
+
+    // 1ms 时基
+    reg [16:0] cnt_1ms;
+    wire tick_1ms;
+
+    // 分频计数
+    reg [5:0] cnt_5ms, cnt_50ms;
+    wire update_angle, update_loc;
+
+    // 状态
+    reg RunState;
+
+    // 位置环目标：固定为 0（不再用按键增减）
+    wire signed [15:0] LocationTarget = 16'd0;
+
+    // 位置 = 编码器原始值 - 初始偏置
+    wire signed [15:0] Location = pos - 16'd32768;
+
+    // PID输出
+    wire signed [7:0] angle_pid_out;
+    wire signed [7:0] loc_pid_out;
+
+    // 角度环目标值 = 中心角度 - 位置环输出
+    wire signed [15:0] loc_pid_out_ext = { {8{loc_pid_out[7]}}, loc_pid_out };
+    wire signed [15:0] AngleTarget = 16'sd2088 - loc_pid_out_ext;
+    wire signed [15:0] angle_actual = $signed({4'd0, Angle});
+
+    // 电机驱动（PWM + 双引脚）
+//    wire signed [7:0] motor_out = RunState ? angle_pid_out : 8'd0;
+//    wire [7:0] pwm_duty = motor_out[7] ? (~motor_out + 1'b1) : motor_out;
+    //================ 电机驱动（PWM 含死区） ================
+    localparam MIN_DUTY = 8'd8;                 // 最小启动占空比（5%），根据电机实测调整
+    wire signed [7:0] motor_out = RunState ? angle_pid_out : 8'd0;
+    wire [7:0] motor_out_abs = motor_out[7] ? (~motor_out + 1'b1) : motor_out;
+    // 死区处理：一旦需转动，占空比至少为 MIN_DUTY，否则输出 0
+    wire [7:0] pwm_duty = (motor_out_abs == 0) ? 8'd0 :
+                       (motor_out_abs < MIN_DUTY) ? MIN_DUTY : motor_out_abs;
+    // 方向/刹车（与前版完全相同）
+    assign in1 = (RunState && motor_out != 8'sd0) ? ~motor_out[7] : 1'b1;
+    assign in2 = (RunState && motor_out != 8'sd0) ?  motor_out[7] : 1'b1;
+
+    //  IN1/IN2 控制：
+    //  运行且 motor_out != 0 时：IN1 = ~sign, IN2 = sign
+    //  停止或 motor_out == 0 时：IN1 = 1, IN2 = 1 → 刹车
+    assign in1 = (RunState && motor_out != 8'sd0) ? ~motor_out[7] : 1'b1;
+    assign in2 = (RunState && motor_out != 8'sd0) ?  motor_out[7] : 1'b1;
+
+    // 串口调试数据
+    wire [15:0] uart_data_in = {4'd0, Angle};
+    wire [31:0] uart_encoder_in = {16'd0, pos};
+    assign led = RunState;
+
+    //================ 子模块例化 ================
+    adc u_adc (
+        .clk_50m(clk_50m), .rst_n(rst_n),
+        .adc_clk(adc_clk), .adc_data_in(adc_data_in),
+        .theta_out(Angle)
+    );
+
+    encoder u_encoder (
+        .clk_50m(clk_50m), .rst_n(rst_n),
+        .enc_a(enc_a), .enc_b(enc_b), .pos(pos)
+    );
+
+    key_filter u_key1 (.sys_clk(clk_50m), .sys_rst_n(rst_n), .key_in(key1), .key_flag(key1_flag));
+    key_filter u_key2 (.sys_clk(clk_50m), .sys_rst_n(rst_n), .key_in(key2), .key_flag(key2_flag));
+    key_filter u_key3 (.sys_clk(clk_50m), .sys_rst_n(rst_n), .key_in(key3), .key_flag(key3_flag));
+
+    pwm_20k_1pct u_pwm (
+        .clk(clk_50m), .rstn(rst_n),
+        .pid_duty(pwm_duty), .pwm(pwm_out)
+    );
+
+    uart #(.CNT_1S(32'd4_999_999)) u_uart (   // 0.1秒发一帧
+        .clk_50M(clk_50m), .rst_n(rst_n),
+        .fpga_rx(fpga_rx), .fpga_tx(fpga_tx),
+        .data_in(uart_data_in), .encoder_in(uart_encoder_in),
+        .data_out()
+    );
+
+    pid_core u_angle_pid (
+        .clk(clk_50m), .rst_n(rst_n),
+        .update(update_angle), .actual(angle_actual), .target(AngleTarget),
+        .Kp(ANGLE_KP), .Ki(ANGLE_KI), .Kd(ANGLE_KD),
+        .deadband(ANGLE_DEAD_BAND),
+        .out(angle_pid_out)
+    );
+
+    pid_core u_loc_pid (
+        .clk(clk_50m), .rst_n(rst_n),
+        .update(update_loc), .actual(Location), .target(LocationTarget),
+        .Kp(LOC_KP), .Ki(LOC_KI), .Kd(LOC_KD),
+        .deadband(LOC_DEAD_BAND),
+        .out(loc_pid_out)
+    );
+
+    //================ 1ms 时基与分频 ================
+    always @(posedge clk_50m or negedge rst_n) begin
+        if (!rst_n) cnt_1ms <= 0;
+        else if (tick_1ms) cnt_1ms <= 0;
+        else cnt_1ms <= cnt_1ms + 1'b1;
+    end
+    assign tick_1ms = (cnt_1ms == 17'd49999);
+
+    always @(posedge clk_50m or negedge rst_n) begin
+        if (!rst_n) begin
+            cnt_5ms  <= 0;
+            cnt_50ms <= 0;
+        end else if (tick_1ms) begin
+            cnt_5ms  <= (cnt_5ms  == 5'd4)  ? 0 : cnt_5ms  + 1'b1;
+            cnt_50ms <= (cnt_50ms == 5'd49) ? 0 : cnt_50ms + 1'b1;
+        end
+    end
+    assign update_angle = tick_1ms && (cnt_5ms == 5'd4);
+    assign update_loc   = tick_1ms && (cnt_50ms == 5'd49);
+
+    //================ 启停与倒下保护 ================
+    always @(posedge clk_50m or negedge rst_n) begin
+        if (!rst_n) begin
+            RunState <= 1'b0;
+        end else begin
+            if (tick_1ms && !(Angle > CENTER_LOW && Angle < CENTER_HIGH))
+                RunState <= 1'b0;          // 倒下自动停止
+            else if (key1_flag)
+                RunState <= ~RunState;     // K1启停
+        end
+    end
+
+    // （K2/K3 原用于增减目标位置，现已删除相关逻辑，仅保留模块实例化以免引脚悬空）
+
+endmodule

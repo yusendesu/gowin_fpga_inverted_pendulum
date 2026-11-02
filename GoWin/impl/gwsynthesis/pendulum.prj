@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE gowin-synthesis-project>
+<Project>
+    <Version>beta</Version>
+    <Device id="GW2A-18C" package="PBGA256C" speed="8" partNumber="GW2A-LV18PG256CC8/I7"/>
+    <FileList>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\PWM.v" type="verilog"/>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\adc.v" type="verilog"/>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\angle_cmd.v" type="verilog"/>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\encoder.v" type="verilog"/>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\key_filter.v" type="verilog"/>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\pid_core.v" type="verilog"/>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\ramp_move.v" type="verilog"/>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\rotate_ctrl.v" type="verilog"/>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\sine_lut.v" type="verilog"/>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\swing_up.v" type="verilog"/>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\telemetry.v" type="verilog"/>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\top.v" type="verilog"/>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\uart_rx.v" type="verilog"/>
+        <File path="E:\DeepSeek\gowin_inverted_pendulum\src\uart_tx.v" type="verilog"/>
+    </FileList>
+    <OptionList>
+        <Option type="disable_insert_pad" value="0"/>
+        <Option type="dsp_style" value="auto"/>
+        <Option type="global_freq" value="100.000"/>
+        <Option type="looplimit" value="2000"/>
+        <Option type="map_option" value="1"/>
+        <Option type="max_fanout" value="1000"/>
+        <Option type="netlist_hierarchy" value="1"/>
+        <Option type="opt_goal" value="auto"/>
+        <Option type="output_file" value="E:\DeepSeek\gowin_inverted_pendulum\impl\gwsynthesis\pendulum.vg"/>
+        <Option type="print_all_synthesis_warning" value="0"/>
+        <Option type="ram_rw_check" value="0"/>
+        <Option type="ram_style" value="auto"/>
+        <Option type="rom_style" value="auto"/>
+        <Option type="shift_reg" value="auto"/>
+        <Option type="top_module" value="top"/>
+        <Option type="vcc" value="1.0"/>
+        <Option type="verilog_language" value="verilog-2001"/>
+        <Option type="vhdl_language" value="vhdl-1993"/>
+    </OptionList>
+</Project>

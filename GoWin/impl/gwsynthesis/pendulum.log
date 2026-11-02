@@ -1,0 +1,67 @@
+GowinSynthesis start
+Running parser ...
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\PWM.v'
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\adc.v'
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\angle_cmd.v'
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\encoder.v'
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\key_filter.v'
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\pid_core.v'
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\ramp_move.v'
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\rotate_ctrl.v'
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\sine_lut.v'
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\swing_up.v'
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\telemetry.v'
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\top.v'
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\uart_rx.v'
+Analyzing Verilog file 'E:\DeepSeek\gowin_inverted_pendulum\src\uart_tx.v'
+Compiling module 'top'("E:\DeepSeek\gowin_inverted_pendulum\src\top.v":48)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 16("E:\DeepSeek\gowin_inverted_pendulum\src\top.v":217)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 16("E:\DeepSeek\gowin_inverted_pendulum\src\top.v":224)
+Compiling module 'adc'("E:\DeepSeek\gowin_inverted_pendulum\src\adc.v":1)
+WARN  (EX3791) : Expression size 18 truncated to fit in target size 17("E:\DeepSeek\gowin_inverted_pendulum\src\adc.v":57)
+WARN  (EX3791) : Expression size 13 truncated to fit in target size 12("E:\DeepSeek\gowin_inverted_pendulum\src\adc.v":67)
+WARN  (EX3791) : Expression size 5 truncated to fit in target size 4("E:\DeepSeek\gowin_inverted_pendulum\src\adc.v":78)
+Compiling module 'encoder'("E:\DeepSeek\gowin_inverted_pendulum\src\encoder.v":1)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 16("E:\DeepSeek\gowin_inverted_pendulum\src\encoder.v":69)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 16("E:\DeepSeek\gowin_inverted_pendulum\src\encoder.v":70)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 16("E:\DeepSeek\gowin_inverted_pendulum\src\encoder.v":71)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 16("E:\DeepSeek\gowin_inverted_pendulum\src\encoder.v":72)
+WARN  (EX3791) : Expression size 17 truncated to fit in target size 16("E:\DeepSeek\gowin_inverted_pendulum\src\encoder.v":74)
+WARN  (EX3791) : Expression size 17 truncated to fit in target size 16("E:\DeepSeek\gowin_inverted_pendulum\src\encoder.v":75)
+WARN  (EX3791) : Expression size 17 truncated to fit in target size 16("E:\DeepSeek\gowin_inverted_pendulum\src\encoder.v":76)
+WARN  (EX3791) : Expression size 17 truncated to fit in target size 16("E:\DeepSeek\gowin_inverted_pendulum\src\encoder.v":77)
+Compiling module 'key_filter'("E:\DeepSeek\gowin_inverted_pendulum\src\key_filter.v":1)
+Compiling module 'pwm_20k_1pct'("E:\DeepSeek\gowin_inverted_pendulum\src\PWM.v":1)
+Compiling module 'swing_up(CENTER_ANGLE=12'b100000001100,SWING_DUTY=8'b01100100,KICK_DUTY=8'b00100011,KICK_MS=16'b0000000001100100,CAPTURE_ANGLE=12'b000100101100,CAPTURE_VEL=16'b0000000000001000,TIMEOUT_MS=16'b0000111110100000,VNEED_OFFSET=8'b00000000)'("E:\DeepSeek\gowin_inverted_pendulum\src\swing_up.v":30)
+Compiling module 'angle_cmd'("E:\DeepSeek\gowin_inverted_pendulum\src\angle_cmd.v":19)
+Compiling module 'uart_rx(UART_BPS=115200,CLK_FREQ=50000000)'("E:\DeepSeek\gowin_inverted_pendulum\src\uart_rx.v":2)
+Compiling module 'rotate_ctrl(SINE_AMP_DEG=8,SINE_GAIN_STEP=66)'("E:\DeepSeek\gowin_inverted_pendulum\src\rotate_ctrl.v":22)
+Compiling module 'ramp_move'("E:\DeepSeek\gowin_inverted_pendulum\src\ramp_move.v":42)
+Compiling module 'sine_lut'("E:\DeepSeek\gowin_inverted_pendulum\src\sine_lut.v":2)
+WARN  (EX3791) : Expression size 17 truncated to fit in target size 16("E:\DeepSeek\gowin_inverted_pendulum\src\rotate_ctrl.v":250)
+WARN  (EX3791) : Expression size 32 truncated to fit in target size 16("E:\DeepSeek\gowin_inverted_pendulum\src\rotate_ctrl.v":253)
+Compiling module 'telemetry'("E:\DeepSeek\gowin_inverted_pendulum\src\telemetry.v":16)
+Compiling module 'uart_tx(UART_BPS=115200,CLK_FREQ=50000000)'("E:\DeepSeek\gowin_inverted_pendulum\src\uart_tx.v":1)
+Compiling module 'pid_core(DIFF_LPF_SHIFT=32'b00000000000000000000000000000001)'("E:\DeepSeek\gowin_inverted_pendulum\src\pid_core.v":15)
+NOTE  (EX0101) : Current top module is "top"
+[5%] Running netlist conversion ...
+WARN  (CV0016) : Input key3 is unused("E:\DeepSeek\gowin_inverted_pendulum\src\top.v":90)
+Running device independent optimization ...
+[10%] Optimizing Phase 0 completed
+[15%] Optimizing Phase 1 completed
+[25%] Optimizing Phase 2 completed
+Running inference ...
+[30%] Inferring Phase 0 completed
+[40%] Inferring Phase 1 completed
+[50%] Inferring Phase 2 completed
+[55%] Inferring Phase 3 completed
+Running technical mapping ...
+[60%] Tech-Mapping Phase 0 completed
+[65%] Tech-Mapping Phase 1 completed
+[75%] Tech-Mapping Phase 2 completed
+[80%] Tech-Mapping Phase 3 completed
+[90%] Tech-Mapping Phase 4 completed
+WARN  (NL0002) : The module "key_filter" instantiated to "u_key3" is swept in optimizing("E:\DeepSeek\gowin_inverted_pendulum\src\top.v":327)
+[95%] Generate netlist file "E:\DeepSeek\gowin_inverted_pendulum\impl\gwsynthesis\pendulum.vg" completed
+[100%] Generate report file "E:\DeepSeek\gowin_inverted_pendulum\impl\gwsynthesis\pendulum_syn.rpt.html" completed
+GowinSynthesis finish

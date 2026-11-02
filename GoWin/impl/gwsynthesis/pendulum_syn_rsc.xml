@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Module name="top" Register="71" Alu="46" Lut="244" MULTALU36X18="1" T_Register="989(71)" T_Alu="961(46)" T_Lut="3248(244)" T_MULT9X9="1(0)" T_MULT18X18="2(0)" T_MULT36X36="6(0)" T_MULTALU36X18="4(1)">
+ <SubModule name="u_adc" Register="71" Alu="13" Lut="70" T_Register="71(71)" T_Alu="13(13)" T_Lut="70(70)"/>
+ <SubModule name="u_encoder" Register="40" Lut="81" T_Register="40(40)" T_Lut="81(81)"/>
+ <SubModule name="u_key1" Register="23" Lut="38" T_Register="23(23)" T_Lut="38(38)"/>
+ <SubModule name="u_key2" Register="23" Lut="39" T_Register="23(23)" T_Lut="39(39)"/>
+ <SubModule name="u_pwm" Register="13" Alu="11" Lut="32" MULT9X9="1" T_Register="13(13)" T_Alu="11(11)" T_Lut="32(32)" T_MULT9X9="1(1)"/>
+ <SubModule name="u_swing" Register="70" Alu="39" Lut="173" T_Register="70(70)" T_Alu="39(39)" T_Lut="173(173)"/>
+ <SubModule name="u_angle_cmd" Register="25" Lut="51" T_Register="66(25)" T_Lut="89(51)">
+  <SubModule name="u_uart_rx" Register="41" Lut="38" T_Register="41(41)" T_Lut="38(38)"/>
+ </SubModule>
+ <SubModule name="u_rotate" Register="68" Alu="17" Lut="462" MULT18X18="2" MULTALU36X18="2" T_Register="190(68)" T_Alu="389(17)" T_Lut="1797(462)" T_MULT18X18="2(2)" T_MULT36X36="1(0)" T_MULTALU36X18="3(2)">
+  <SubModule name="u_ramp" Register="122" Alu="372" Lut="839" MULT36X36="1" MULTALU36X18="1" T_Register="122(122)" T_Alu="372(372)" T_Lut="839(839)" T_MULT36X36="1(1)" T_MULTALU36X18="1(1)"/>
+  <SubModule name="u_sin" Lut="248" T_Lut="248(248)"/>
+  <SubModule name="u_cos" Lut="248" T_Lut="248(248)"/>
+ </SubModule>
+ <SubModule name="u_telemetry" Register="258" Alu="69" Lut="214" T_Register="295(258)" T_Alu="69(69)" T_Lut="282(214)">
+  <SubModule name="u_tx" Register="37" Lut="68" T_Register="37(37)" T_Lut="68(68)"/>
+ </SubModule>
+ <SubModule name="u_angle_pid" Register="70" Alu="235" Lut="235" MULT36X36="3" T_Register="70(70)" T_Alu="235(235)" T_Lut="235(235)" T_MULT36X36="3(3)"/>
+ <SubModule name="u_loc_pid" Register="57" Alu="159" Lut="168" MULT36X36="2" T_Register="57(57)" T_Alu="159(159)" T_Lut="168(168)" T_MULT36X36="2(2)"/>
+</Module>

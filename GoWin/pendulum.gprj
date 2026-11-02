@@ -1,0 +1,24 @@
+<?xml version="1" encoding="UTF-8"?>
+<!DOCTYPE gowin-fpga-project>
+<Project>
+    <Template>FPGA</Template>
+    <Version>5</Version>
+    <Device name="GW2A-18C" pn="GW2A-LV18PG256CC8/I7">gw2a18c-014</Device>
+    <FileList>
+        <File path="src/PWM.v" type="file.verilog" enable="1"/>
+        <File path="src/adc.v" type="file.verilog" enable="1"/>
+        <File path="src/angle_cmd.v" type="file.verilog" enable="1"/>
+        <File path="src/encoder.v" type="file.verilog" enable="1"/>
+        <File path="src/key_filter.v" type="file.verilog" enable="1"/>
+        <File path="src/pid_core.v" type="file.verilog" enable="1"/>
+        <File path="src/ramp_move.v" type="file.verilog" enable="1"/>
+        <File path="src/rotate_ctrl.v" type="file.verilog" enable="1"/>
+        <File path="src/sine_lut.v" type="file.verilog" enable="1"/>
+        <File path="src/swing_up.v" type="file.verilog" enable="1"/>
+        <File path="src/telemetry.v" type="file.verilog" enable="1"/>
+        <File path="src/top.v" type="file.verilog" enable="1"/>
+        <File path="src/uart_rx.v" type="file.verilog" enable="1"/>
+        <File path="src/uart_tx.v" type="file.verilog" enable="1"/>
+        <File path="src/pendulum.cst" type="file.cst" enable="1"/>
+    </FileList>
+</Project>

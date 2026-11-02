@@ -1,0 +1,154 @@
+[
+    {
+        "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+        "InstLine": 48,
+        "InstName": "top",
+        "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+        "ModuleLine": 48,
+        "ModuleName": "top",
+        "SubInsts": [
+            {
+                "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+                "InstLine": 309,
+                "InstName": "u_adc",
+                "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/adc.v",
+                "ModuleLine": 1,
+                "ModuleName": "adc"
+            },
+            {
+                "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+                "InstLine": 317,
+                "InstName": "u_encoder",
+                "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/encoder.v",
+                "ModuleLine": 1,
+                "ModuleName": "encoder"
+            },
+            {
+                "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+                "InstLine": 325,
+                "InstName": "u_key1",
+                "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/key_filter.v",
+                "ModuleLine": 1,
+                "ModuleName": "key_filter"
+            },
+            {
+                "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+                "InstLine": 326,
+                "InstName": "u_key2",
+                "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/key_filter.v",
+                "ModuleLine": 1,
+                "ModuleName": "key_filter"
+            },
+            {
+                "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+                "InstLine": 327,
+                "InstName": "u_key3",
+                "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/key_filter.v",
+                "ModuleLine": 1,
+                "ModuleName": "key_filter"
+            },
+            {
+                "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+                "InstLine": 329,
+                "InstName": "u_pwm",
+                "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/PWM.v",
+                "ModuleLine": 1,
+                "ModuleName": "pwm_20k_1pct"
+            },
+            {
+                "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+                "InstLine": 347,
+                "InstName": "u_swing",
+                "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/swing_up.v",
+                "ModuleLine": 30,
+                "ModuleName": "swing_up"
+            },
+            {
+                "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+                "InstLine": 365,
+                "InstName": "u_angle_cmd",
+                "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/angle_cmd.v",
+                "ModuleLine": 19,
+                "ModuleName": "angle_cmd",
+                "SubInsts": [
+                    {
+                        "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/angle_cmd.v",
+                        "InstLine": 45,
+                        "InstName": "u_uart_rx",
+                        "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/uart_rx.v",
+                        "ModuleLine": 2,
+                        "ModuleName": "uart_rx"
+                    }
+                ]
+            },
+            {
+                "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+                "InstLine": 391,
+                "InstName": "u_rotate",
+                "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/rotate_ctrl.v",
+                "ModuleLine": 22,
+                "ModuleName": "rotate_ctrl",
+                "SubInsts": [
+                    {
+                        "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/rotate_ctrl.v",
+                        "InstLine": 100,
+                        "InstName": "u_ramp",
+                        "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/ramp_move.v",
+                        "ModuleLine": 42,
+                        "ModuleName": "ramp_move"
+                    },
+                    {
+                        "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/rotate_ctrl.v",
+                        "InstLine": 145,
+                        "InstName": "u_sin",
+                        "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/sine_lut.v",
+                        "ModuleLine": 2,
+                        "ModuleName": "sine_lut"
+                    },
+                    {
+                        "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/rotate_ctrl.v",
+                        "InstLine": 146,
+                        "InstName": "u_cos",
+                        "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/sine_lut.v",
+                        "ModuleLine": 2,
+                        "ModuleName": "sine_lut"
+                    }
+                ]
+            },
+            {
+                "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+                "InstLine": 417,
+                "InstName": "u_telemetry",
+                "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/telemetry.v",
+                "ModuleLine": 16,
+                "ModuleName": "telemetry",
+                "SubInsts": [
+                    {
+                        "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/telemetry.v",
+                        "InstLine": 73,
+                        "InstName": "u_tx",
+                        "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/uart_tx.v",
+                        "ModuleLine": 1,
+                        "ModuleName": "uart_tx"
+                    }
+                ]
+            },
+            {
+                "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+                "InstLine": 441,
+                "InstName": "u_angle_pid",
+                "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/pid_core.v",
+                "ModuleLine": 15,
+                "ModuleName": "pid_core"
+            },
+            {
+                "InstFile": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+                "InstLine": 458,
+                "InstName": "u_loc_pid",
+                "ModuleFile": "E:/DeepSeek/gowin_inverted_pendulum/src/pid_core.v",
+                "ModuleLine": 15,
+                "ModuleName": "pid_core"
+            }
+        ]
+    }
+]

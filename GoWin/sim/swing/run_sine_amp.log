@@ -1,0 +1,15 @@
+﻿t=   0 ms  target=     0 counts (0.00 deg)  v_ref=     0
+t= 250 ms  target=    76 counts (20.73 deg)  v_ref= 16321
+t= 500 ms  target=   220 counts (60.00 deg)  v_ref=  1105
+t= 750 ms  target=   159 counts (43.36 deg)  v_ref=-31098
+t=1000 ms  target=     5 counts (1.36 deg)  v_ref=-45085
+t=1250 ms  target=  -152 counts (-41.45 deg)  v_ref=-32662
+t=1500 ms  target=  -220 counts (-60.00 deg)  v_ref= -1107
+t=1750 ms  target=  -159 counts (-43.36 deg)  v_ref= 31096
+t=2000 ms  target=    -5 counts (-1.36 deg)  v_ref= 45083
+t=2250 ms  target=   152 counts (41.45 deg)  v_ref= 32660
+t=2500 ms  target=   220 counts (60.00 deg)  v_ref=  1105
+t=2750 ms  target=   159 counts (43.36 deg)  v_ref=-31098
+MAX=220  MIN=-220  peak-to-peak=440 counts = 120.00 deg, |v_ref|max=45099
+PASS: 正弦幅值 = ±60.0 deg
+sim\tb_sine_amp.v:61: $finish called at 3000600000 (1ps)

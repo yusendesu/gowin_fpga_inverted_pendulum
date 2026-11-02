@@ -1,0 +1,11 @@
+﻿==== tb_top_logic ====
+PASS hang counter: hang_ms=12 angle=0
+PASS [auto hang -> SWING]: state=1 armed=1 angle=0
+PASS [captured -> BALANCE]: state=2 armed=1 angle=2052
+PASS [K1 stop]: state=0 armed=0 angle=2052
+PASS [K1 upright -> BALANCE]: state=2 armed=1 angle=2052
+PASS [K1 stop again]: state=0 armed=0 angle=2052
+PASS [K1 hanging -> SWING]: state=1 armed=1 angle=0
+PASS [timeout -> IDLE/disarmed]: state=0 armed=0 angle=0
+==== ALL TESTS PASSED ====
+sim\tb_top_logic.v:129: $finish called at 130111600000 (1ps)

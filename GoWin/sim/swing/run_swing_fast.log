@@ -1,0 +1,10 @@
+==== tb_swing_fast: active=1 from t=0, pendulum hanging ====
+t=  0.0 ms  theta= 180.00 deg  angle=   5  e=-2048  v=  0.0  drive=   0
+t=100.0 ms  theta= 168.45 deg  angle=3969  e= 1916  v=-12.0  drive=  35
+t=200.0 ms  theta= 123.74 deg  angle=3460  e= 1407  v=-34.0  drive=   0
+t=300.0 ms  theta=  74.88 deg  angle=2905  e=  852  v=-24.0  drive=   0
+t=400.0 ms  theta=  45.87 deg  angle=2574  e=  521  v=-14.0  drive=   0
+t=500.0 ms  theta=  24.37 deg  angle=2330  e=  277  v=-11.0  drive=   0
+CAPTURED t=575.0 ms angle=2201 e=148 v=-8.0
+==== END t=2500.0 ms theta=-115.59 got_capture=1 ====
+sim/tb_swing_fast.v:130: $finish called at 2500000200000 (1ps)

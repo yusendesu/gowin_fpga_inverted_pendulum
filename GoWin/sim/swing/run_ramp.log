@@ -1,0 +1,16 @@
+﻿==== tb_ramp_move ====
+PASS load: target=0
+PASS [+90 ramp]: target=330 after 3366 ms
+PASS [+90 settle]: rotating=0 v_ref=0 (settle 22 ms)
+PASS +90: |v_ref|max=6554
+PASS +90: no overshoot (max_target=330)
+PASS [-45 ramp]: target=165 after 1716 ms
+PASS [-45 settle]: rotating=0 v_ref=0 (settle 21 ms)
+PASS [accumulate +20/+40]: target=220 after 2166 ms
+PASS [accumulate settle]: rotating=0 v_ref=0 (settle 21 ms)
+PASS [travel clamp 360deg]: target=1320 after 13247 ms
+PASS travel clamp: max_target=1320
+PASS [clamp settle]: rotating=0 v_ref=0 (settle 27 ms)
+PASS track guard: fault=1 target=0
+==== ALL TESTS PASSED ====
+sim\tb_ramp_move.v:253: $finish called at 22206059000000 (1ps)

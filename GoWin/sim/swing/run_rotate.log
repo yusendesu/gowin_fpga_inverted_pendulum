@@ -1,0 +1,10 @@
+﻿==== tb_rotate ====
+PASS load: target=1000
+PASS [+90 ramp]: target=1330 after 3366 ms
+PASS [-45 ramp]: target=1165 after 1753 ms
+PASS lock current position: target=1200
+PASS sine start: target=1237
+PASS sine stop: target=1200
+PASS ignore while not balancing
+==== ALL TESTS PASSED ====
+sim\tb_rotate.v:177: $finish called at 6319041000000 (1ps)

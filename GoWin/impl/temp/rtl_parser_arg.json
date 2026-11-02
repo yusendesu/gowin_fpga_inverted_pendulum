@@ -1,0 +1,68 @@
+{
+    "Device": "GW2A-18C",
+    "Files": [
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/PWM.v",
+            "Type": "verilog"
+        },
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/adc.v",
+            "Type": "verilog"
+        },
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/angle_cmd.v",
+            "Type": "verilog"
+        },
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/encoder.v",
+            "Type": "verilog"
+        },
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/key_filter.v",
+            "Type": "verilog"
+        },
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/pid_core.v",
+            "Type": "verilog"
+        },
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/ramp_move.v",
+            "Type": "verilog"
+        },
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/rotate_ctrl.v",
+            "Type": "verilog"
+        },
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/sine_lut.v",
+            "Type": "verilog"
+        },
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/swing_up.v",
+            "Type": "verilog"
+        },
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/telemetry.v",
+            "Type": "verilog"
+        },
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/top.v",
+            "Type": "verilog"
+        },
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/uart_rx.v",
+            "Type": "verilog"
+        },
+        {
+            "Path": "E:/DeepSeek/gowin_inverted_pendulum/src/uart_tx.v",
+            "Type": "verilog"
+        }
+    ],
+    "IncludePath": [
+    ],
+    "LoopLimit": 2000,
+    "ResultFile": "E:/DeepSeek/gowin_inverted_pendulum/impl/temp/rtl_parser.result",
+    "Top": "top",
+    "VerilogStd": "verilog_2001",
+    "VhdlStd": "vhdl_93"
+}

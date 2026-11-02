@@ -1,0 +1,12 @@
+==== tb_uart_cmd ====
+PASS [+90]: angle=90
+PASS [-90]: angle=-90
+PASS [-86 data=AA]: angle=-86
+PASS [+85 data=55]: angle=85
+PASS [+13 data=0D]: angle=13
+PASS [clamp +181]: angle=180
+PASS [clamp -181]: angle=-180
+PASS sine start frame
+PASS sine stop frame
+==== ALL TESTS PASSED ====
+sim/tb_uart_cmd.v:152: $finish called at 22121950000 (1ps)
